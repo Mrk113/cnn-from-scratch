@@ -1,6 +1,6 @@
 from layer import Layer
 
-class Conv(Layer):
+class MaxPool(Layer):
     def __init__(self):
         # TODO: ...
         pass
