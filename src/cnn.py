@@ -1,29 +1,47 @@
-from core.utils.train import train
-from core.losses.mse import MSE
+from core import *
 
+X_train, y_train, X_test, y_test = load("cifar10", 
+                                        flatten=False, 
+                                        normalize=True, 
+                                        label_encoding="index")
 
-X, Y = load()  
-
-# miniVGG
 network = [
-    Conv,
-    ReLu,
-    Conv,
-    ReLu,
+    Conv(3, 64, 3),
+    ReLU(),
+    Conv(64, 64, 3),
+    ReLU(),
+    MaxPool(2),
 
-    Pool,
+    Conv(64, 128, 3),
+    ReLU(),
+    Conv(128, 128, 3),
+    ReLU(),
+    MaxPool(2),
 
-    Conv,
-    ReLu,
-    Conv,
-    ReLu,
+    Conv(128, 256, 3),
+    ReLU(),
+    Conv(256, 256, 3),
+    ReLU(),
+    MaxPool(2),
 
-    Pool,
-
-    FC,
-    ReLu,
-    FC,
-    ReLu,
+    Flatten(),
+    FC(256 * 4 * 4, 512),
+    ReLU(),
+    FC(512, 10),
 ]
 
-train(network, MSE, X, Y, epochs=250, learning_rate=0.01, batch_size=32, verbose=True)
+training_config = TrainConfig(
+    epochs=80,
+    batch_size=128,
+    learning_rate=0.001,
+    verbose=True,
+    eval_every=1,
+)
+
+history = train(
+    network,
+    CrossEntropy(),
+    Data(X_train, y_train),
+    config=training_config,
+    val_data=Data(X_test, y_test)
+)
