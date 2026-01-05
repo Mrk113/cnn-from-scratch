@@ -1,38 +1,30 @@
-from loss import Loss
+from core.losses.loss import Loss
 import cupy as cp
 
 class CrossEntropy(Loss):
-    def compute(predicted, actual):
-        if cp.any(predicted < 0) or cp.any(predicted > 1):
-            raise ValueError("CrossEntropy: predicted values must be in [0, 1].")
+    def compute(self, predicted, actual):
+        shift = predicted - cp.max(predicted, axis=1, keepdims=True)
+        logsumexp = cp.log(cp.sum(cp.exp(shift), axis=1, keepdims=True))
+        log_probs = shift - logsumexp 
 
-        row_sums = cp.sum(predicted, axis=1)
-        if not cp.allclose(row_sums, 1.0, atol=1e-5):
-            raise ValueError(
-                "CrossEntropy: predicted values must sum to 1 along each row "
-                "(softmax probabilities)."
-            )
+        if actual.ndim == 1:
+            # actual is class indices
+            loss = -log_probs[cp.arange(predicted.shape[0]), actual]
+        else:
+            # actual is one-hot
+            loss = -cp.sum(actual * log_probs, axis=1)
 
-        # avoid log(0) by clipping values
-        eps = 1e-12
-        predicted = cp.clip(predicted, eps, 1. - eps)
-        ce = -cp.sum(actual * cp.log(predicted), axis=1)
-        return cp.mean(ce)
+        return cp.mean(loss)
 
-    def gradient(predicted, actual):
-        if cp.any(predicted < 0) or cp.any(predicted > 1):
-            raise ValueError("CrossEntropy: predicted values must be in [0, 1].")
+    def gradient(self, predicted, actual):
+        shift = predicted - cp.max(predicted, axis=1, keepdims=True)
+        exps = cp.exp(shift)
+        probs = exps / cp.sum(exps, axis=1, keepdims=True)
 
-        row_sums = cp.sum(predicted, axis=1)
-        if not cp.allclose(row_sums, 1.0, atol=1e-5):
-            raise ValueError(
-                "CrossEntropy: predicted rows must sum to 1 "
-                "(softmax probabilities)."
-            )
-    
-        # avoid division by zero by clipping values
-        eps = 1e-12
-        predicted = cp.clip(predicted, eps, 1. - eps)
+        if actual.ndim == 1:
+            y = cp.zeros_like(probs)
+            y[cp.arange(predicted.shape[0]), actual] = 1
+        else:
+            y = actual
 
-        grad = -(actual/predicted)
-        return grad / actual.shape[0]
+        return (probs - y) / predicted.shape[0]
