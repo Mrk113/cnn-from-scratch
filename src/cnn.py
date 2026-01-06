@@ -32,10 +32,9 @@ network = [
 
 training_config = TrainConfig(
     epochs=80,
-    batch_size=128,
-    learning_rate=0.001,
+    batch_size=64,
+    learning_rate=0.005,
     verbose=True,
-    eval_every=1,
 )
 
 history = train(
@@ -45,3 +44,5 @@ history = train(
     config=training_config,
     val_data=Data(X_test, y_test)
 )
+
+log(history)

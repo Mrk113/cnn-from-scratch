@@ -198,7 +198,7 @@ class CIFAR10Dataset(DatasetBase):
     X = X.astype(cp.float32, copy=False)
 
     if normalize:
-      X /= 255.0
+      X /= cp.float32(255.0)
     if flatten:
       X = X.reshape(X.shape[0], -1)
 
