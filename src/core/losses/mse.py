@@ -3,7 +3,11 @@ import cupy as cp
 
 class MSE(Loss):
     def compute(self, predicted, actual):
-        return cp.mean((predicted - actual) ** 2)
+        p = predicted.astype(cp.float32, copy=False)
+        a = actual.astype(cp.float32, copy=False)
+        return cp.mean((p - a) ** 2, dtype=cp.float32)
 
     def gradient(self, predicted, actual):
-        return 2 * (predicted - actual) / predicted.size
+        p = predicted.astype(cp.float32, copy=False)
+        a = actual.astype(cp.float32, copy=False)
+        return (cp.float32(2.0) * (p - a)) / cp.float32(p.size)
