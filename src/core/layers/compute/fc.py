@@ -2,7 +2,7 @@ from core.layers.layer import Layer
 import cupy as cp
 
 class FC(Layer):
-    def __init__(self, input_size, output_size, dtype=cp.float32):
+    def __init__(self, input_size, output_size):
         self.input_size = input_size
         self.output_size = output_size
 
