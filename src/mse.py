@@ -29,4 +29,4 @@ history = train(
     val_data=Data(X_test, y_test)
 )
 
-log(history)
+log(history) 

@@ -6,21 +6,27 @@ X_train, y_train, X_test, y_test = load("cifar10",
                                         label_encoding="index")
 
 network = [
-    Conv(3, 64, 3),
+    Conv(3, 64, 3, padding=1),
+    BatchNorm(),
     ReLU(),
-    Conv(64, 64, 3),
-    ReLU(),
-    MaxPool(2),
-
-    Conv(64, 128, 3),
-    ReLU(),
-    Conv(128, 128, 3),
+    Conv(64, 64, 3, padding=1),
+    BatchNorm(),
     ReLU(),
     MaxPool(2),
 
-    Conv(128, 256, 3),
+    Conv(64, 128, 3, padding=1),
+    BatchNorm(),
     ReLU(),
-    Conv(256, 256, 3),
+    Conv(128, 128, 3, padding=1),
+    BatchNorm(),
+    ReLU(),
+    MaxPool(2),
+
+    Conv(128, 256, 3, padding=1),
+    BatchNorm(),
+    ReLU(),
+    Conv(256, 256, 3, padding=1),
+    BatchNorm(),
     ReLU(),
     MaxPool(2),
 
@@ -28,6 +34,11 @@ network = [
     FC(256 * 4 * 4, 512),
     ReLU(),
     FC(512, 10),
+]
+
+transform = [
+    RandomHorizontalFlip(prob=0.5),
+    RandomCrop(padding=4)
 ]
 
 training_config = TrainConfig(
@@ -39,10 +50,11 @@ training_config = TrainConfig(
 
 history = train(
     network,
+    transform,
     CrossEntropy(),
     Data(X_train, y_train),
     config=training_config,
     val_data=Data(X_test, y_test)
 )
 
-log(history)
+log(history, save_path="logs/cifar10")
