@@ -209,5 +209,8 @@ __marimo__/
 # Datasets
 data/
 
+# Logs
+logs/
+
 # Editor
 .vscode/
