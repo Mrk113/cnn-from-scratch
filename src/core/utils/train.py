@@ -25,8 +25,8 @@ def forward(network, X):
 
 def evaluate(network, loss, data: Data, batch_size: int):
 
-    total_loss = cp.array(0.0, dtype=cp.float32)
-    correct = cp.array(0, dtype=cp.int32)
+    total_loss = cp.float32(0.0) 
+    correct = cp.int32(0)
     dataset_size = int(data.X.shape[0])
 
     for i in range(0, dataset_size, batch_size):
@@ -53,6 +53,7 @@ def evaluate(network, loss, data: Data, batch_size: int):
 
 def train(
     network,
+    transform,
     loss,
     train_data: Data,
     val_data: Data,
@@ -91,6 +92,10 @@ def train(
             X_batch = train_data.X[batch_idx]
             Y_batch = train_data.Y[batch_idx]
             batch_size = int(X_batch.shape[0])
+
+            # Transform
+            for t in transform:
+                X_batch = t.apply(X_batch)
 
             # Forward pass
             output = forward(network, X_batch)

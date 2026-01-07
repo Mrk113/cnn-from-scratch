@@ -198,7 +198,9 @@ class CIFAR10Dataset(DatasetBase):
     X = X.astype(cp.float32, copy=False)
 
     if normalize:
-      X /= cp.float32(255.0)
+      mean = cp.mean(X, axis=(0, 2, 3), keepdims=True)
+      std = cp.std(X, axis=(0, 2, 3), keepdims=True)
+      X = (X - mean) / (std)
     if flatten:
       X = X.reshape(X.shape[0], -1)
 
