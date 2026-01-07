@@ -1,21 +1,12 @@
 import torch
 import cupy as cp
 import numpy as np
-import pytest
 from cupy.testing import assert_allclose
 
 from core.layers.compute.conv import Conv
 
 
-def _require_cuda_cupy():
-    try:
-        if cp.cuda.runtime.getDeviceCount() <= 0:
-            pytest.skip("Conv tests require CUDA-enabled CuPy")
-    except Exception:
-        pytest.skip("Conv tests require CUDA-enabled CuPy")
-
 def test_Conv():
-    _require_cuda_cupy()
     # Settings
     torch.manual_seed(11) 
     batch_size = 2
@@ -28,8 +19,8 @@ def test_Conv():
     in_i = cp.array(in_t.detach().numpy())
 
     # Test forward 
-    op_i = Conv(in_channels, out_channels, kernel_size)
-    op_t = torch.nn.Conv2d(in_channels, out_channels, kernel_size, padding=kernel_size // 2)
+    op_i = Conv(in_channels, out_channels, kernel_size, stride=1, padding=1)
+    op_t = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=1)
 
     # Copy weights and biases from op_i to op_t for consistency
     op_t.weight.data = torch.tensor(np.array(op_i.kernels.get()), dtype=torch.float32)
