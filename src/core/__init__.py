@@ -4,6 +4,10 @@ from core.layers.activation.softmax import Softmax
 from core.layers.compute.conv import Conv
 from core.layers.compute.fc import FC
 from core.layers.compute.flatten import Flatten
+from core.layers.compute.batch_norm import BatchNorm
+
+from core.transforms.random_crop import RandomCrop
+from core.transforms.random_horizontal_flip import RandomHorizontalFlip
 
 from core.layers.pooling.max_pool import MaxPool
 

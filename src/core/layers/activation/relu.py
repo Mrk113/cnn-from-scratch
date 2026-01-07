@@ -2,6 +2,8 @@ from core.layers.layer import Layer
 import cupy as cp
 
 class ReLU(Layer):
+    """ReLU activation"""
+
     def forward(self, input):
         x = input.astype(cp.float32, copy=False)
         self.input = x

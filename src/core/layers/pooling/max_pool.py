@@ -2,53 +2,53 @@ from core.layers.layer import Layer
 import cupy as cp
 
 class MaxPool(Layer):
-    def __init__(self, kernel_size):
-        self.kernel_size = kernel_size
+    def __init__(self, kernel_size, stride=None, padding=0):
+        self.kernel_size = int(kernel_size)
+        self.stride = int(stride) if stride is not None else int(kernel_size)
+        self.padding = int(padding)
+
         self.argmax = None
-        self._cache_key = None
-        self._base_h = None
-        self._base_w = None
-        self._b_idx = None
-        self._c_idx = None
+        self.input = None
+        self._x_pad_shape = None
+        self._h_out = None
+        self._w_out = None
 
     def forward(self, input):
-        if input.ndim != 4:
-            raise ValueError("MaxPool input must be 4D (N, C, H, W)")
-
         x = input.astype(cp.float32, copy=False)
         self.input = x
-        batch_size, channels, height, width = x.shape
-        k = int(self.kernel_size)
-        if k <= 0:
-            raise ValueError("kernel_size must be >= 1")
-        if height % k != 0 or width % k != 0:
-            raise ValueError("Input height/width must be divisible by kernel_size")
+        N, C, H, W = x.shape
 
-        h_out = height // k
-        w_out = width // k
+        k = self.kernel_size
+        s = self.stride
+        p = self.padding
 
-        windows = x.reshape(batch_size, channels, h_out, k, w_out, k)
-        windows = windows.transpose(0, 1, 2, 4, 3, 5)  # (N, C, H_out, W_out, k, k)
+        if p > 0:
+            x_pad = cp.pad(
+                x,
+                ((0, 0), (0, 0), (p, p), (p, p)),
+            )
+        else:
+            x_pad = x
+
+        H_p, W_p = int(x_pad.shape[2]), int(x_pad.shape[3])
+        H_out = (H_p - k) // s + 1
+        W_out = (W_p - k) // s + 1
+        self._h_out = int(H_out)
+        self._w_out = int(W_out)
+        self._x_pad_shape = tuple(x_pad.shape)
+
+        stN, stC, stH, stW = x_pad.strides
+        shape = (N, C, H_out, W_out, k, k)
+        strides = (stN, stC, stH * s, stW * s, stH, stW)
+        windows = cp.lib.stride_tricks.as_strided(x_pad, shape=shape, strides=strides)
 
         # Forward output
         out = windows.max(axis=(4, 5)).astype(cp.float32, copy=False)
 
         # Track argmax positions for backward (row-major within each kxk window)
-        flat = windows.reshape(batch_size, channels, h_out, w_out, k * k)
+        flat = windows.reshape(N, C, H_out, W_out, k * k)
         argmax = flat.argmax(axis=-1).astype(cp.int32, copy=False)
         self.argmax = argmax
-
-        cache_key = (int(batch_size), int(channels), int(h_out), int(w_out), int(k))
-        if self._cache_key != cache_key:
-            # Base coordinates for each pooling window.
-            self._base_h = (cp.arange(h_out, dtype=cp.int32) * cp.int32(k)).reshape(1, 1, h_out, 1)
-            self._base_w = (cp.arange(w_out, dtype=cp.int32) * cp.int32(k)).reshape(1, 1, 1, w_out)
-
-            b_idx = cp.arange(batch_size, dtype=cp.int32).reshape(batch_size, 1, 1, 1)
-            c_idx = cp.arange(channels, dtype=cp.int32).reshape(1, channels, 1, 1)
-            self._b_idx = cp.broadcast_to(b_idx, (batch_size, channels, h_out, w_out))
-            self._c_idx = cp.broadcast_to(c_idx, (batch_size, channels, h_out, w_out))
-            self._cache_key = cache_key
 
         self.output = out
         return out
@@ -58,19 +58,33 @@ class MaxPool(Layer):
             raise ValueError("MaxPool.backward called before forward")
 
         grad = output_gradient.astype(cp.float32, copy=False)
-        dx = cp.zeros_like(self.input, dtype=cp.float32)
-        batch_size, channels, h_out, w_out = grad.shape
+        N, C, H_out, W_out = grad.shape
 
-        k = int(self.kernel_size)
+        k = self.kernel_size
+        s = self.stride
+        p = self.padding
+
         local_h = (self.argmax // k).astype(cp.int32, copy=False)
         local_w = (self.argmax - local_h * k).astype(cp.int32, copy=False)
 
-        max_h = (self._base_h + local_h).astype(cp.int32, copy=False)
-        max_w = (self._base_w + local_w).astype(cp.int32, copy=False)
+        base_h = (cp.arange(H_out, dtype=cp.int32) * cp.int32(s)).reshape(1, 1, H_out, 1)
+        base_w = (cp.arange(W_out, dtype=cp.int32) * cp.int32(s)).reshape(1, 1, 1, W_out)
+        max_h = base_h + local_h
+        max_w = base_w + local_w
 
-        # Pooling windows are non-overlapping (stride == kernel_size), so each input
-        # location belongs to exactly one output window. That means no atomic add is
-        # required here; a simple indexed write is correct and faster.
-        dx[self._b_idx, self._c_idx, max_h, max_w] = grad
+        dx_pad = cp.zeros(self._x_pad_shape, dtype=cp.float32)
+        n_idx = cp.arange(N, dtype=cp.int32).reshape(N, 1, 1, 1)
+        c_idx = cp.arange(C, dtype=cp.int32).reshape(1, C, 1, 1)
+        n_idx = cp.broadcast_to(n_idx, (N, C, H_out, W_out))
+        c_idx = cp.broadcast_to(c_idx, (N, C, H_out, W_out))
+
+        # With stride < kernel_size, pooling windows overlap, so accumulation is required.
+        cp.add.at(dx_pad, (n_idx, c_idx, max_h, max_w), grad)
+
+        if p > 0:
+            dx = dx_pad[:, :, p:-p, p:-p]
+        else:
+            dx = dx_pad
+
         self.input_gradient = dx
         return dx
