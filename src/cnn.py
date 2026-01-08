@@ -1,10 +1,5 @@
 from core import *
 
-X_train, y_train, X_test, y_test = load("cifar10", 
-                                        flatten=False, 
-                                        normalize=True, 
-                                        label_encoding="index")
-
 network = [
     Conv(3, 64, 3, padding=1),
     BatchNorm(),
@@ -36,25 +31,46 @@ network = [
     FC(512, 10),
 ]
 
-transform = [
+train_transform = [
     RandomHorizontalFlip(prob=0.5),
-    RandomCrop(padding=4)
+    RandomCrop(padding=4),
+    Normalize()
 ]
 
-training_config = TrainConfig(
+label_transform = [
+    OneHotEncode(10)
+]
+
+train_data = CIFAR10(
+  root = "data",
+  train=True,
+  download=True,
+  transform=train_transform
+  target_transform=label_transform,
+)
+
+test_data = CIFAR10(
+  root = "data",
+  train=False,
+  download=True,
+)
+
+config = TrainConfig(
     epochs=80,
     batch_size=64,
-    learning_rate=0.005,
-    verbose=True,
+    optimzer=SGD()
+    lr_scheduler=CosineAnnealingLR(0.0001),
+    loss=CrossEntropy(),
 )
 
-history = train(
-    network,
-    transform,
-    CrossEntropy(),
-    Data(X_train, y_train),
-    config=training_config,
-    val_data=Data(X_test, y_test)
+train = Trainer(
+    config,
+    callbacks=[
+      ProgessBar(),
+      CSVLogger(),
+      PythonPlot(),
+      WandbLogger(),
+    ]
 )
 
-log(history, save_path="logs/cifar10")
+train.fit(model, train_data, test_data)
