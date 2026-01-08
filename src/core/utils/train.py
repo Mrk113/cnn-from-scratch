@@ -1,7 +1,13 @@
-import cupy as cp
-from tqdm import tqdm
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass
+from typing import Any, Mapping
+
+import cupy as cp
+from tqdm import tqdm
+
+from core.utils.lr_scheduler import ConstantLR, TrainState, create_lr_scheduler
 
 @dataclass
 class Data:
@@ -14,6 +20,7 @@ class TrainConfig:
     learning_rate: float
     batch_size: int
     verbose: bool
+    lr_scheduler: Any | Mapping[str, Any] | None = None
 
 
 def forward(network, X):
@@ -53,11 +60,11 @@ def evaluate(network, loss, data: Data, batch_size: int):
 
 def train(
     network,
-    transform,
     loss,
     train_data: Data,
     val_data: Data,
     config: TrainConfig,
+    transform=None,
     shuffle: bool = True,
 ):
     history = {
@@ -72,6 +79,21 @@ def train(
     dataset_size = int(train_data.X.shape[0])
 
     indices = cp.arange(dataset_size, dtype=cp.int32)
+
+    steps_per_epoch = (dataset_size + config.batch_size - 1) // config.batch_size
+
+    if config.lr_scheduler is None:
+        lr_scheduler = ConstantLR()
+    elif isinstance(config.lr_scheduler, Mapping):
+        lr_scheduler = create_lr_scheduler(config.lr_scheduler)
+    else:
+        lr_scheduler = config.lr_scheduler
+
+    lr_scheduler.setup(
+        base_lr=float(config.learning_rate),
+        epochs=int(config.epochs),
+        steps_per_epoch=int(steps_per_epoch),
+    )
 
     for epoch in range(config.epochs):
         epoch_start = time.perf_counter()
@@ -93,9 +115,20 @@ def train(
             Y_batch = train_data.Y[batch_idx]
             batch_size = int(X_batch.shape[0])
 
+            global_step = epoch * steps_per_epoch + (b // config.batch_size)
+            state = TrainState(
+                epoch=epoch,
+                batch=(b // config.batch_size),
+                global_step=int(global_step),
+                epochs=int(config.epochs),
+                steps_per_epoch=int(steps_per_epoch),
+            )
+            current_lr = float(lr_scheduler.lr(state))
+
             # Transform
-            for t in transform:
-                X_batch = t.apply(X_batch)
+            if transform is not None:
+                for t in transform:
+                    X_batch = t.apply(X_batch)
 
             # Forward pass
             output = forward(network, X_batch)
@@ -108,7 +141,7 @@ def train(
             # Backward pass
             grad = loss.gradient(output, Y_batch)
             for layer in reversed(network):
-                grad = layer.backward(grad, config.learning_rate)
+                grad = layer.backward(grad, current_lr)
 
         train_loss = total_loss / seen
         train_loss = float(train_loss.get())
