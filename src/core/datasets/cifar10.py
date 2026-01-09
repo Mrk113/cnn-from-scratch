@@ -1,22 +1,25 @@
 import os
 import cupy as cp
-from typing import Callable, Optional
+from typing import Optional, Callable
 
 from .dataset import DataSet
-from ..utils import download_from_url, gzip_extract, read_idx_file
+from ..utils import download_from_url, targz_extract, read_bin_file
 
-class MNIST(DataSet):
-    """MNIST Dataset."""
+class CIFAR10(DataSet):
+    """CIFAR-10 Dataset."""
 
-    base_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
-    resources = [
-        "train-images-idx3-ubyte.gz",
-        "train-labels-idx1-ubyte.gz",
-        "t10k-images-idx3-ubyte.gz",
-        "t10k-labels-idx1-ubyte.gz"
+    base_url = "https://www.cs.toronto.edu/~kriz/"
+    resource = "cifar-10-binary.tar.gz"
+    train_list = [
+        "data_batch_1.bin",
+        "data_batch_2.bin",
+        "data_batch_3.bin",
+        "data_batch_4.bin",
+        "data_batch_5.bin"
     ]
-    train_list = ("train-images-idx3-ubyte", "train-labels-idx1-ubyte")
-    test_list = ("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte")
+    test_list = [
+        "test_batch.bin"
+    ]
 
     def __init__(self,
                  *,
@@ -55,39 +58,42 @@ class MNIST(DataSet):
     
     def _check_exists(self) -> bool:
         # Check if dataset files exist
-        dir_path = os.path.join(self.root, "MNIST")
+        dir_path = os.path.join(self.root, "CIFAR10")
         if self.train:
             files = self.train_list
         else:
             files = self.test_list
         return all(
-            os.path.exists(os.path.join(dir_path, file_name))
+            os.path.exists(os.path.join(dir_path, "cifar-10-batches-bin", file_name))
             for file_name in files
-        ) 
+        )
     
     def _load_data(self) -> tuple[cp.ndarray, cp.ndarray]:
         # Load data from files
-        dir_path = os.path.join(self.root, "MNIST")
+        dir_path = os.path.join(self.root, "CIFAR10")
         if self.train:
-            img_file, target_file = self.train_list
+            file_list = self.train_list
         else:
-            img_file, target_file = self.test_list
+            file_list = self.test_list
 
-        img_path = os.path.join(dir_path, img_file)
-        target_path = os.path.join(dir_path, target_file)
+        data_list = []
+        targets_list = []
 
-        # Load images
-        images = read_idx_file(img_path)
-        # Load targets
-        targets = read_idx_file(target_path)
+        for file_name in file_list:
+            file_path = os.path.join(dir_path, "cifar-10-batches-bin", file_name)
+            images, labels = read_bin_file(file_path)
+            data_list.append(images)
+            targets_list.append(labels)
 
-        return images, targets
+        data = cp.concatenate(data_list, axis=0)
+        targets = cp.concatenate(targets_list, axis=0)
 
+        return data, targets
+    
     def download(self) -> None:
         # Download dataset files into dir_path
         if self._check_exists():
             return
-
-        dir_path = os.path.join(self.root, "MNIST")
-        download_from_url(self.base_url, self.resources, dir_path)
-        gzip_extract(self.resources, dir_path) 
+        dir_path = os.path.join(self.root, "CIFAR10")
+        download_from_url(self.base_url, [self.resource], dir_path)
+        targz_extract(os.path.join(dir_path, self.resource), dir_path)
