@@ -1,35 +1,46 @@
 import cupy as cp
-from core.transforms.transfrom import Transform
+from core.transforms.compose import Transform
+
+from ..utils import get_dims, pad, crop
 
 class RandomCrop(Transform):
-    def __init__(self, padding: int):
+    # Randomly crop the given image.
+    # Padding: Optional padding on each border of the image. With a given fill.
+    # Size: Desired output size of the crop (height, width).
+    def __init__(self, 
+                 size: tuple[int, int], 
+                 padding: int = None, 
+                 fill: int = 0
+                ) -> None:
         self.padding = padding
+        self.size = size
+        self.fill = fill
 
-    def apply(self, X: cp.ndarray) -> cp.ndarray:
-      x = X.astype(cp.float32, copy=False)
-      n, c, h, w = x.shape
+    def __call__(self, img: cp.ndarray) -> cp.ndarray:
+        # Apply padding if specified (pad returns a new array)
+        if self.padding is not None:
+            img = pad(img, self.padding, self.fill)
 
-      p = int(self.padding)
-      if p > 0:
-        x_padded = cp.pad(
-          x,
-          ((0, 0), (0, 0), (p, p), (p, p)),
-          mode="constant",
-        )
-        max_offset = 2 * p
-        top = cp.random.randint(0, max_offset + 1, size=n, dtype=cp.int32)
-        left = cp.random.randint(0, max_offset + 1, size=n, dtype=cp.int32)
-      else:
-        x_padded = x
-        top = cp.zeros((n,), dtype=cp.int32)
-        left = cp.zeros((n,), dtype=cp.int32)
+        # Get random crop parameters
+        i, j, h, w = self.get_params(img, self.size)
+        return crop(img, i, j, h, w)
+    
+    def get_params(self, 
+                   img: cp.ndarray, 
+                   output_size: tuple[int, int]
+                   ) -> tuple[int, int, int, int]:
+        # Get parameters for a random crop.
+        _, h, w = get_dims(img)
+        th, tw = output_size
 
-      rows = top[:, None] + cp.arange(h, dtype=cp.int32)[None, :]
-      cols = left[:, None] + cp.arange(w, dtype=cp.int32)[None, :]
+        if h < th or w < tw:
+            raise ValueError("Requested crop size is bigger than image size")
+        
+        if w == tw and h == th:
+            return 0, 0, h, w
+        
+        i = cp.random.randint(0, h - th + 1)
+        j = cp.random.randint(0, w - tw + 1)
+        return i, j, th, tw 
 
-      n_idx = cp.arange(n, dtype=cp.int32)[:, None, None, None]
-      c_idx = cp.arange(c, dtype=cp.int32)[None, :, None, None]
-      row_idx = rows[:, None, :, None]
-      col_idx = cols[:, None, None, :]
 
-      return x_padded[n_idx, c_idx, row_idx, col_idx]

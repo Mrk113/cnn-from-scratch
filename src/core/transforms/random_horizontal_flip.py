@@ -1,26 +1,14 @@
 import cupy as cp
 
-from core.transforms.transfrom import Transform
+from core.transforms.compose import Transform
 
 class RandomHorizontalFlip(Transform):
-    def __init__(self, prob: float = 0.5):
-        self.prob = prob
+    # Randomly flip the image horizontally with probability p.
+    def __init__(self, p: float):
+        self.p = p
 
-    def apply(self, X: cp.ndarray) -> cp.ndarray:
-        x = X.astype(cp.float32, copy=False)
-        p = float(self.prob)
-        if p <= 0.0:
-          return x
-        if p >= 1.0:
-          return cp.flip(x, axis=3)
-
-        n = int(x.shape[0])
-        mask = (cp.random.rand(n) < p)
-        if bool(mask.all()):
-          return cp.flip(x, axis=3)
-        if not bool(mask.any()):
-          return x
-
-        out = x.copy()
-        out[mask] = cp.flip(out[mask], axis=3)
-        return out
+    def __call__(self, img: cp.ndarray) -> cp.ndarray:
+        # Apply horizontal flip with probability p
+        if cp.random.rand() < self.p:
+            return cp.flip(img, axis=-1)
+        return img
