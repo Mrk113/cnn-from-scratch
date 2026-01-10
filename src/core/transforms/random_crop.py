@@ -1,5 +1,6 @@
 import cupy as cp
 from core.transforms.compose import Transform
+from typing import Callable
 
 from ..utils import get_dims, pad, crop
 
@@ -10,11 +11,14 @@ class RandomCrop(Transform):
     def __init__(self, 
                  size: tuple[int, int], 
                  padding: int = None, 
-                 fill: int = 0
+                 fill: int = 0,
+                 *,
+                 rand_algo: Callable = cp.random.rand
                 ) -> None:
         self.padding = padding
         self.size = size
         self.fill = fill
+        self.rand_algo = rand_algo
 
     def __call__(self, img: cp.ndarray) -> cp.ndarray:
         # Apply padding if specified (pad returns a new array)
@@ -39,8 +43,8 @@ class RandomCrop(Transform):
         if w == tw and h == th:
             return 0, 0, h, w
         
-        i = cp.random.randint(0, h - th + 1)
-        j = cp.random.randint(0, w - tw + 1)
+        i = self.rand_algo(0, h - th + 1, size=(1,)).item()
+        j = self.rand_algo(0, w - tw + 1, size=(1,)).item()
         return i, j, th, tw 
 
 
