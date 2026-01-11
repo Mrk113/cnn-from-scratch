@@ -1,8 +1,8 @@
 """Base class for loss functions."""
 
 class Loss:
-    def compute(self, predicted, actual):
-        raise NotImplementedError("Compute method not implemented.")
+    def forward(self, predicted, actual):
+        raise NotImplementedError
     
-    def gradient(self, predicted, actual):
-        raise NotImplementedError("Gradient method not implemented.")
+    def backward(self, predicted, actual):
+        raise NotImplementedError

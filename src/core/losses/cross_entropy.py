@@ -2,7 +2,7 @@ from core.losses.loss import Loss
 import cupy as cp
 
 class CrossEntropy(Loss):
-    def compute(self, predicted, actual):
+    def forward(self, predicted, actual):
         shift = predicted - cp.max(predicted, axis=1, keepdims=True)
         logsumexp = cp.log(cp.sum(cp.exp(shift), axis=1, keepdims=True))
         log_probs = shift - logsumexp 
@@ -16,7 +16,7 @@ class CrossEntropy(Loss):
 
         return cp.mean(loss)
 
-    def gradient(self, predicted, actual):
+    def backward(self, predicted, actual):
         shift = predicted - cp.max(predicted, axis=1, keepdims=True)
         exps = cp.exp(shift)
         probs = exps / cp.sum(exps, axis=1, keepdims=True)
