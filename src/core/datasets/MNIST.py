@@ -17,6 +17,8 @@ class MNIST(DataSet):
     ]
     train_list = ("train-images-idx3-ubyte", "train-labels-idx1-ubyte")
     test_list = ("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte")
+    mean = [0.1307]
+    std = [0.3081]
 
     def __init__(self,
                  *,
@@ -40,6 +42,10 @@ class MNIST(DataSet):
             raise RuntimeError("Dataset not found. You can use download=True to download it")
         
         self.data, self.targets = self._load_data()
+
+    def __len__(self):
+        # Returns the total number of samples
+        return len(self.data)
 
     def __getitem__(self, index: int) -> tuple[cp.ndarray, cp.ndarray]:
         # Returns the image and target at the specified index with applied transforms

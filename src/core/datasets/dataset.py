@@ -13,6 +13,10 @@ class DataSet:
         self.transform = transform
         self.target_transform = target_transform
 
+    def __len__(self) -> int:
+        # Returns the size of the dataset
+        raise NotImplementedError
+
     def __getitem__(self, index: int) -> Any:
         # Returns the item at the specified index
         raise NotImplementedError

@@ -20,6 +20,8 @@ class CIFAR10(DataSet):
     test_list = [
         "test_batch.bin"
     ]
+    std = [0.2023, 0.1994, 0.2010]
+    mean = [0.4914, 0.4822, 0.4465]
 
     def __init__(self,
                  *,
@@ -55,6 +57,9 @@ class CIFAR10(DataSet):
             target = self.target_transform(target)
 
         return img, target
+    
+    def __len__(self):
+        return len(self.data)
     
     def _check_exists(self) -> bool:
         # Check if dataset files exist
@@ -97,3 +102,4 @@ class CIFAR10(DataSet):
         dir_path = os.path.join(self.root, "CIFAR10")
         download_from_url(self.base_url, [self.resource], dir_path)
         targz_extract(os.path.join(dir_path, self.resource), dir_path)
+
