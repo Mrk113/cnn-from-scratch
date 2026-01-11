@@ -1,6 +1,10 @@
-from core import *
+from core import Model
+from core.layers import *
+from core.transforms import *
+from core.datasets import CIFAR10
+from core.losses import CrossEntropy
 
-network = [
+model = Model([
     Conv(3, 64, 3, padding=1),
     BatchNorm(),
     ReLU(),
@@ -29,48 +33,39 @@ network = [
     FC(256 * 4 * 4, 512),
     ReLU(),
     FC(512, 10),
-]
+])
 
-train_transform = [
-    RandomHorizontalFlip(prob=0.5),
-    RandomCrop(padding=4),
-    Normalize()
-]
-
-label_transform = [
-    OneHotEncode(10)
-]
+train_transform = Compose([
+    RandomHorizontalFlip(p=0.5),
+    RandomCrop(size=(32, 32), padding=4),
+    Scale(),
+    Normalize(mean=CIFAR10.mean, std=CIFAR10.std, axis=1),
+])
 
 train_data = CIFAR10(
   root = "data",
-  train=True,
-  download=True,
-  transform=train_transform
-  target_transform=label_transform,
+  train = True,
+  download = True,
+  transform = train_transform
 )
 
 test_data = CIFAR10(
   root = "data",
-  train=False,
-  download=True,
+  train = False,
+  download = True,
 )
 
-config = TrainConfig(
-    epochs=80,
-    batch_size=64,
-    optimzer=SGD()
-    lr_scheduler=CosineAnnealingLR(0.0001),
+model.config(
     loss=CrossEntropy(),
+    lr=0.01
 )
 
-train = Trainer(
-    config,
-    callbacks=[
-      ProgessBar(),
-      CSVLogger(),
-      PythonPlot(),
-      WandbLogger(),
-    ]
+history = model.fit(
+    train_data,
+    None,
+    epochs=10,
+    batch_size=64,
 )
 
-train.fit(model, train_data, test_data)
+history.plot()
+history.wandb()
