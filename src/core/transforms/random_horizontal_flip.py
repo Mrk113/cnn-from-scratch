@@ -1,7 +1,7 @@
 import cupy as cp
 from typing import Callable
 
-from core.transforms.compose import Transform
+from .transform import Transform
 from ..utils import hflip
 
 class RandomHorizontalFlip(Transform):

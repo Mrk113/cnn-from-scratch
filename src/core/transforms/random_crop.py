@@ -1,7 +1,7 @@
 import cupy as cp
-from core.transforms.compose import Transform
 from typing import Callable
 
+from .transform import Transform
 from ..utils import get_dims, pad, crop
 
 class RandomCrop(Transform):
@@ -13,7 +13,7 @@ class RandomCrop(Transform):
                  padding: int = None, 
                  fill: int = 0,
                  *,
-                 rand_algo: Callable = cp.random.rand
+                 rand_algo: Callable = cp.random.randint
                 ) -> None:
         self.padding = padding
         self.size = size

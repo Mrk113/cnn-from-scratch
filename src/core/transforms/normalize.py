@@ -13,7 +13,7 @@ class Normalize(Transform):
         self.std = cp.array(std)
         self.axis = axis
  
-    def __call__(self, img) -> cp.ndarray:
+    def __call__(self, img: cp.ndarray) -> cp.ndarray:
 
         if cp.any(self.std == 0):
             raise ValueError("Standard deviation cannot be zero for normalization.")
