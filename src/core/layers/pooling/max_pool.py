@@ -1,90 +1,103 @@
-from core.layers.layer import Layer
+"""Max pooling layer implemented with im2col for efficiency."""
+
+from typing import Optional
+
 import cupy as cp
 
+from core.layers.layer import Layer
+from ...utils import pad, im2col, col2im
+
+
 class MaxPool(Layer):
-    def __init__(self, kernel_size, stride=None, padding=0):
-        self.kernel_size = int(kernel_size)
-        self.stride = int(stride) if stride is not None else int(kernel_size)
-        self.padding = int(padding)
+    """Apply max pooling over input feature maps."""
+
+    def __init__(self,
+                 kernel_size: int,
+                 stride: Optional[int] = None,
+                 padding: int = 0
+                ) -> None:
+        """Initialize pooling parameters.
+
+        Args:
+            kernel_size: Size of the (square) pooling window.
+            stride: Stride of the pooling operation; defaults to kernel_size if None.
+            padding: Zero-padding applied to input before pooling.
+        """
+        super().__init__()
+        self.kernel_size = kernel_size
+        self.stride = stride if stride is not None else kernel_size
+        self.padding = padding
 
         self.argmax = None
-        self.input = None
-        self._x_pad_shape = None
-        self._h_out = None
-        self._w_out = None
+        self.padded_shape = None
+        self.im2col_indices: Optional[tuple[cp.ndarray, cp.ndarray, cp.ndarray]] = None
+        self.im2col_key: Optional[tuple[int, int, int, int, int, int]] = None
 
-    def forward(self, input):
-        x = input.astype(cp.float32, copy=False)
+    def forward(self, x: cp.ndarray) -> cp.ndarray:
+        """Compute the forward max-pooling pass.
+
+        Args:
+            x: Input tensor of shape (N, C, H, W).
+
+        Returns:
+            cp.ndarray: Output tensor after max pooling with shape (N, C, H_out, W_out).
+        """
         self.input = x
-        N, C, H, W = x.shape
-
         k = self.kernel_size
         s = self.stride
         p = self.padding
 
-        if p > 0:
-            x_pad = cp.pad(
-                x,
-                ((0, 0), (0, 0), (p, p), (p, p)),
-            )
-        else:
-            x_pad = x
+        x = pad(x, p, fill=0)
+        self.padded_shape = x.shape
+        N, C, H_p, W_p = x.shape
 
-        H_p, W_p = int(x_pad.shape[2]), int(x_pad.shape[3])
         H_out = (H_p - k) // s + 1
         W_out = (W_p - k) // s + 1
-        self._h_out = int(H_out)
-        self._w_out = int(W_out)
-        self._x_pad_shape = tuple(x_pad.shape)
 
-        stN, stC, stH, stW = x_pad.strides
-        shape = (N, C, H_out, W_out, k, k)
-        strides = (stN, stC, stH * s, stW * s, stH, stW)
-        windows = cp.lib.stride_tricks.as_strided(x_pad, shape=shape, strides=strides)
+        # Cache im2col indices for the current spatial configuration to avoid
+        # rebuilding them on every forward/backward step.
+        im2col_key = (*x.shape, k, s)
+        if self.im2col_key == im2col_key and self.im2col_indices is not None:
+            cols = im2col(x, k, k, s, indices=self.im2col_indices)
+        else:
+            cols, self.im2col_indices = im2col(
+                x, k, k, s, return_indices=True
+            )
+            self.im2col_key = im2col_key
 
-        # Forward output
-        out = windows.max(axis=(4, 5)).astype(cp.float32, copy=False)
+        cols = cols.reshape(C, k * k, -1)  # (C, k*k, N*H_out*W_out)
+        out = cp.max(cols, axis=1)  # (C, N*H_out*W_out)
+        self.argmax = cp.argmax(cols, axis=1)  # Cache for backward pass
+        out = out.reshape(C, N, H_out, W_out) # (C, N, H_out, W_out)
+        out = out.transpose(1, 0, 2, 3)  # (N, C, H_out, W_out)
 
-        # Track argmax positions for backward (row-major within each kxk window)
-        flat = windows.reshape(N, C, H_out, W_out, k * k)
-        argmax = flat.argmax(axis=-1).astype(cp.int32, copy=False)
-        self.argmax = argmax
-
-        self.output = out
         return out
 
-    def backward(self, output_gradient, learning_rate=None):
-        if self.input is None or self.argmax is None:
-            raise ValueError("MaxPool.backward called before forward")
+    def backward(self, grad: cp.ndarray, lr: Optional[float] = None) -> cp.ndarray:
+        """Backpropagate gradients through the max-pooling operation.
 
-        grad = output_gradient.astype(cp.float32, copy=False)
+        Args:
+            grad: Upstream gradient of shape (N, C, H_out, W_out).
+            lr: Unused learning rate parameter included for interface consistency.
+
+        Returns:
+            cp.ndarray: Gradient with respect to the input, shape (N, C, H, W).
+        """
         N, C, H_out, W_out = grad.shape
 
         k = self.kernel_size
         s = self.stride
         p = self.padding
 
-        local_h = (self.argmax // k).astype(cp.int32, copy=False)
-        local_w = (self.argmax - local_h * k).astype(cp.int32, copy=False)
+        grad = grad.transpose(1, 0, 2, 3).reshape(C, -1)  # (C, N*H_out*W_out)
+        dmax = cp.zeros((C, k * k, N*H_out*W_out), dtype=cp.float32)  # (C, k*k, N*H_out*W_out)
+        c_idx = cp.arange(C).reshape(-1, 1)  # (C, 1)
+        nh_idx = cp.arange(N*H_out*W_out).reshape(1, -1)  # (1, N*H_out*W_out)
+        dmax[c_idx, self.argmax, nh_idx] = grad  # (C, k*k, N*H_out*W_out)
 
-        base_h = (cp.arange(H_out, dtype=cp.int32) * cp.int32(s)).reshape(1, 1, H_out, 1)
-        base_w = (cp.arange(W_out, dtype=cp.int32) * cp.int32(s)).reshape(1, 1, 1, W_out)
-        max_h = base_h + local_h
-        max_w = base_w + local_w
-
-        dx_pad = cp.zeros(self._x_pad_shape, dtype=cp.float32)
-        n_idx = cp.arange(N, dtype=cp.int32).reshape(N, 1, 1, 1)
-        c_idx = cp.arange(C, dtype=cp.int32).reshape(1, C, 1, 1)
-        n_idx = cp.broadcast_to(n_idx, (N, C, H_out, W_out))
-        c_idx = cp.broadcast_to(c_idx, (N, C, H_out, W_out))
-
-        # With stride < kernel_size, pooling windows overlap, so accumulation is required.
-        cp.add.at(dx_pad, (n_idx, c_idx, max_h, max_w), grad)
+        dx = col2im(dmax, self.padded_shape, k, k, s, indices=self.im2col_indices)  # (N, C, H_p, W_p)
 
         if p > 0:
-            dx = dx_pad[:, :, p:-p, p:-p]
-        else:
-            dx = dx_pad
+            dx = dx[:, :, p:-p, p:-p]
 
-        self.input_gradient = dx
         return dx

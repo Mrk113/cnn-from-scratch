@@ -1,135 +1,146 @@
-from core.layers.layer import Layer
+"""2D convolution layer implemented with im2col for efficiency."""
+
+from typing import Optional, Tuple
+
 import cupy as cp
+
+from ...utils import pad, im2col, col2im
+from ..layer import Layer
 
 
 class Conv(Layer):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
-        self.in_channels = int(in_channels)
-        self.out_channels = int(out_channels)
-        self.kernel_size = int(kernel_size)
-        self.stride = int(stride)
-        self.padding = int(padding)
+    """Perform a 2D convolution (cross-correlation) over input feature maps."""
 
-        # He init (roughly) to keep activations stable.
-        scale = cp.sqrt(cp.float32(2.0) / cp.float32(self.in_channels * self.kernel_size * self.kernel_size))
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: int,
+                 stride: int = 1,
+                 padding: int = 0
+                ) -> None:
+        """Initialize convolution parameters and weights.
+
+        Args:
+            in_channels: Number of input channels.
+            out_channels: Number of output channels (filters).
+            kernel_size: Size of the (square) convolution kernel.
+            stride: Stride of the convolution.
+            padding: Zero-padding applied to both spatial dimensions.
+        """
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+
+        scale = cp.sqrt(
+            2.0 / (self.in_channels * self.kernel_size * self.kernel_size),
+            dtype=cp.float32,
+        )
+        
+        # Initialze kernels (C_out, C_in, k, k)
         self.kernels = (
             cp.random.randn(
                 self.out_channels,
                 self.in_channels,
                 self.kernel_size,
                 self.kernel_size,
-            ).astype(cp.float32)
-            * scale.astype(cp.float32)
+                dtype=cp.float32
+            )
+            * scale
         )
+        # Initialize biases (C_out,)
         self.biases = cp.zeros((self.out_channels,), dtype=cp.float32)
+
+        self.padded_shape = None
+        self.w_row = None
+        self.x_col = None
+        self.im2col_indices: Optional[Tuple[cp.ndarray, cp.ndarray, cp.ndarray]] = None
+        self.im2col_key: Optional[Tuple[int, int, int, int, int, int]] = None  # (N, C, H_p, W_p, k, s)
 
         self.kernels_grad = None
         self.biases_grad = None
 
-        # Saved for backward
-        self.input = None
-        self._cols = None
-        self._x_padded_shape = None
-        self._h_out = None
-        self._w_out = None
+    def forward(self, x: cp.ndarray) -> cp.ndarray:
+        """Compute the forward convolution pass.
 
-    def _im2col(self, x_padded: cp.ndarray, H_out: int, W_out: int) -> cp.ndarray:
-        """Return 2D matrix of shape (N*H_out*W_out, C*k*k)."""
+        Args:
+            x: Input tensor of shape (N, C_in, H_in, W_in).
 
-        N, C, _, _ = x_padded.shape
-        k = self.kernel_size
-        s = self.stride
-
-        stN, stC, stH, stW = x_padded.strides
-        shape = (N, C, k, k, H_out, W_out)
-        strides = (stN, stC, stH, stW, stH * s, stW * s)
-
-        x_cols = cp.lib.stride_tricks.as_strided(x_padded, shape=shape, strides=strides)
-        cols = x_cols.transpose(0, 4, 5, 1, 2, 3).reshape(N * H_out * W_out, -1)
-        return cols
-
-    def _col2im(self, cols_2d: cp.ndarray, x_padded_shape: tuple[int, int, int, int], H_out: int, W_out: int) -> cp.ndarray:
-        """Inverse of im2col: cols_2d shape (N*H_out*W_out, C*k*k)."""
-        N, C, H_p, W_p = map(int, x_padded_shape)
-        k = self.kernel_size
-        s = self.stride
-
-        i0 = cp.repeat(cp.arange(k, dtype=cp.int32), k)
-        i0 = cp.tile(i0, C)
-        j0 = cp.tile(cp.arange(k, dtype=cp.int32), k)
-        j0 = cp.tile(j0, C)
-
-        i1 = cp.repeat(cp.arange(H_out, dtype=cp.int32) * s, W_out)
-        j1 = cp.tile(cp.arange(W_out, dtype=cp.int32) * s, H_out)
-
-        i = i0.reshape(-1, 1) + i1.reshape(1, -1)
-        j = j0.reshape(-1, 1) + j1.reshape(1, -1)
-        c = cp.repeat(cp.arange(C, dtype=cp.int32), k * k).reshape(-1, 1)
-
-        # (N*H_out*W_out, C*k*k) -> (N, C*k*k, H_out*W_out)
-        cols = cols_2d.reshape(N, H_out * W_out, C * k * k).transpose(0, 2, 1)
-
-        x_padded = cp.zeros((N, C, H_p, W_p), dtype=cp.float32)
-        cp.add.at(x_padded, (slice(None), c, i, j), cols)
-        return x_padded
-
-    def forward(self, input: cp.ndarray) -> cp.ndarray:
-        N, C, H, W = input.shape
-
-        x = cp.ascontiguousarray(input.astype(cp.float32, copy=False))
+        Returns:
+            cp.ndarray: Output tensor of shape (N, C_out, H_out, W_out).
+        """
         self.input = x
-
-        k = self.kernel_size
+        w = self.kernels
+        b = self.biases
         p = self.padding
         s = self.stride
 
-        H_out = (H + 2 * p - k) // s + 1
-        W_out = (W + 2 * p - k) // s + 1
-        self._h_out = int(H_out)
-        self._w_out = int(W_out)
+        N, C, H_in, W_in = x.shape
+        C_out, _, kH, kW = w.shape
 
-        if p > 0:
-            x_padded = cp.pad(x, ((0, 0), (0, 0), (p, p), (p, p)), mode="constant")
+        # Compute output spatial dimensions
+        H_out = (H_in + 2 * p - kH) // s + 1
+        W_out = (W_in + 2 * p - kW) // s + 1
+
+        # Apply padding to the input
+        x = pad(x, p, fill=0)
+        self.padded_shape = x.shape  # Cache for backward pass
+
+        # Cache im2col indices for the current spatial configuration to avoid
+        # rebuilding them on every forward/backward step.
+        im2col_key = (*x.shape, kH, s)
+        if self.im2col_key == im2col_key and self.im2col_indices is not None:
+            x_col = im2col(x, kH, kW, s, indices=self.im2col_indices)
         else:
-            x_padded = x
+            x_col, self.im2col_indices = im2col(
+                x, kH, kW, s, return_indices=True
+            )
+            self.im2col_key = im2col_key
 
-        self._x_padded_shape = tuple(x_padded.shape)
+        # Perform cross-correlation via im2col for efficiency
+        w_row = w.reshape(C_out, -1)  # (C_out, C_in*kH*kW)
+        self.w_row = w_row  # Cache for backward pass
+        self.x_col = x_col  # Cache for backward pass
+        out = w_row.dot(x_col) + b.reshape(-1, 1) # (C_out, N*H_out*W_out)
+        out = out.reshape(C_out, N, H_out, W_out) # (C_out, N, H_out, W_out)
+        return out.transpose(1, 0, 2, 3)  # (N, C_out, H_out, W_out)
 
-        cols = self._im2col(x_padded, H_out=H_out, W_out=W_out)  # (N*H_out*W_out, C*k*k)
-        self._cols = cols
+    def backward(self, grad: cp.ndarray, lr: float) -> cp.ndarray:
+        """Backpropagate gradients and update convolution parameters.
 
-        w_col = self.kernels.reshape(self.out_channels, -1)  # (F, C*k*k)
-        out_2d = cols @ w_col.T  # (N*H*W, F)
-        out_2d += self.biases.reshape(1, -1)
+        Args:
+            grad: Upstream gradient of shape (N, C_out, H_out, W_out).
+            lr: Learning rate for parameter updates.
 
-        out = out_2d.reshape(N, H_out, W_out, self.out_channels).transpose(0, 3, 1, 2)
-        return out
-
-    def backward(self, output_gradient: cp.ndarray, learning_rate: float) -> cp.ndarray:
-        dout = cp.ascontiguousarray(output_gradient.astype(cp.float32, copy=False))
-        N, F, H_out, W_out = dout.shape
-        
+        Returns:
+            cp.ndarray: Gradient with respect to the input, shape (N, C_in, H, W).
+        """
+        x = self.input
+        w = self.kernels
         p = self.padding
+        s = self.stride
 
-        dout_2d = dout.transpose(0, 2, 3, 1).reshape(-1, F)  # (N*H*W, F)
-        cols = self._cols  # (N*H*W, C*k*k)
+        C_out, _, kH, kW = w.shape
 
-        dW = (dout_2d.T @ cols).reshape(self.kernels.shape)
-        db = cp.sum(dout_2d, axis=0)
-        self.kernels_grad = dW
+        grad_2d = grad.transpose(1, 0, 2, 3).reshape(self.out_channels, -1) # (C_out, N*H_out*W_out)
+        dw = grad_2d.dot(self.x_col.T)  # (C_out, C_in*kH*kW)
+        dw = dw.reshape(w.shape)  # (C_out, C_in, kH, kW)
+        db = cp.sum(grad_2d, axis=1)  # (C_out,)
+
+        self.kernels_grad = dw
         self.biases_grad = db
 
-        w_col = self.kernels.reshape(F, -1)
-        dcols = dout_2d @ w_col  # (N*H*W, C*k*k)
+        dx = self.w_row.T.dot(grad_2d)  # (C_in*kH*kW, N*H_out*W_out)
+        dx = col2im(dx, self.padded_shape, kH, kW, s, indices=self.im2col_indices)
 
-        dx_padded = self._col2im(dcols, self._x_padded_shape, H_out=H_out, W_out=W_out)
         if p > 0:
-            dx = dx_padded[:, :, p:-p, p:-p]
-        else:
-            dx = dx_padded
+            dx = dx[:, :, p:-p, p:-p]
 
-        self.kernels -= (learning_rate * dW).astype(cp.float32, copy=False)
-        self.biases -= (learning_rate * db).astype(cp.float32, copy=False)
+        # Update weights and biases
+        self.kernels -= lr * dw
+        self.biases -= lr * db
 
         return dx
 

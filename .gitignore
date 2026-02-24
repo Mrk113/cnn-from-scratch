@@ -211,6 +211,7 @@ data/
 
 # Logs
 logs/
+wandb/
 
 # Editor
 .vscode/

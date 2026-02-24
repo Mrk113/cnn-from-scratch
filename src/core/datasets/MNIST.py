@@ -1,3 +1,10 @@
+"""MNIST dataset.
+
+This module exposes a CuPy MNIST dataset wrapper that can
+download gzip-compressed IDX files, load them into memory, and apply optional
+transforms to images and labels.
+"""
+
 import os
 import cupy as cp
 from typing import Callable, Optional
@@ -6,7 +13,11 @@ from .dataset import DataSet
 from ..utils import download_from_url, gzip_extract, read_idx_file
 
 class MNIST(DataSet):
-    """MNIST Dataset."""
+    """Provide access to the MNIST dataset.
+
+    Instances manage train or test splits and load
+    samples as CuPy arrays for GPU processing.
+    """
 
     base_url = "https://storage.googleapis.com/cvdf-datasets/mnist/"
     resources = [
@@ -28,6 +39,18 @@ class MNIST(DataSet):
                  target_transform: Optional[Callable] = None,
                  download: bool = True
                  ) -> None:
+        """Initialize dataset configuration and load samples.
+
+        Args:
+            root: Root directory where MNIST files are stored or downloaded.
+            train: Whether to load the training split (True) or test split (False).
+            transform: Optional function applied to each image.
+            target_transform: Optional function applied to each target label.
+            download: Whether to download the dataset if required files are missing.
+
+        Raises:
+            RuntimeError: If dataset files remain missing after attempted download.
+        """
         super().__init__(
             root=root,
             transform=transform,
@@ -43,12 +66,24 @@ class MNIST(DataSet):
         
         self.data, self.targets = self._load_data()
 
-    def __len__(self):
-        # Returns the total number of samples
+    def __len__(self) -> int:
+        """Return the total number of samples in the split.
+
+        Returns:
+            int: Dataset length for the chosen split.
+        """
         return len(self.data)
 
     def __getitem__(self, index: int) -> tuple[cp.ndarray, cp.ndarray]:
-        # Returns the image and target at the specified index with applied transforms
+        """Fetch an image and target, applying any configured transforms.
+
+        Args:
+            index: Zero-based sample index to retrieve.
+
+        Returns:
+            tuple[cp.ndarray, cp.ndarray]: Image tensor and corresponding label,
+            with applied transforms.
+        """
         img, target = self.data[index], self.targets[index]
 
         if self.transform:
@@ -60,7 +95,11 @@ class MNIST(DataSet):
         return img, target
     
     def _check_exists(self) -> bool:
-        # Check if dataset files exist
+        """Check whether the required MNIST files exist on disk.
+
+        Returns:
+            bool: True if all expected files for the split are present.
+        """
         dir_path = os.path.join(self.root, "MNIST")
         if self.train:
             files = self.train_list
@@ -72,7 +111,11 @@ class MNIST(DataSet):
         ) 
     
     def _load_data(self) -> tuple[cp.ndarray, cp.ndarray]:
-        # Load data from files
+        """Load MNIST images and labels from IDX files.
+
+        Returns:
+            tuple[cp.ndarray, cp.ndarray]: Image and label arrays for the split.
+        """
         dir_path = os.path.join(self.root, "MNIST")
         if self.train:
             img_file, target_file = self.train_list
@@ -90,7 +133,10 @@ class MNIST(DataSet):
         return images, targets
 
     def download(self) -> None:
-        # Download dataset files into dir_path
+        """Download and extract MNIST archives when missing.
+
+        The download is skipped if all expected files already exist.
+        """
         if self._check_exists():
             return
 
