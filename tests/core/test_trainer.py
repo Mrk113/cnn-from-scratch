@@ -18,13 +18,13 @@ class FakeDataSet:
 
 class FakeModel:
 	def __init__(self):
-		self.last_lr = None
+		self.weight = 1.0
 
 	def forward(self, x):
 		return x
 
 	def backward(self, grad, lr):
-		self.last_lr = lr
+		self.weight -= lr * grad
 
 
 class FakeLoss:
@@ -36,7 +36,7 @@ class FakeLoss:
 	
 class FakeScheduler:
 	def __call__(self, epoch):
-		return 0.05
+		return 0.5
 	
 def test_fit():
     x = cp.array([1.0, 2.0])
@@ -52,10 +52,10 @@ def test_fit():
 
     trainer.fit(train_data=data, epochs=1, batch_size=1)
 
-    assert model.last_lr == 0.05
+    assert cp.isclose(model.weight, 0.9)
     assert trainer.logs["train_loss"] == 0.5
     assert trainer.logs["epoch"] == 1
-    assert trainer.logs["lr"] == 0.05
+    assert trainer.logs["lr"] == 0.5
 
 
 def test_evaluate():

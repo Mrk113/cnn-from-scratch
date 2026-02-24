@@ -3,11 +3,13 @@
 import cupy as cp
 from typing import Iterable
 
+from core.layers import Layer
+
 
 class Model:
     """Run forward and backward passes through a sequence of layers."""
 
-    def __init__(self, layers: Iterable) -> None:
+    def __init__(self, layers: Iterable[Layer]) -> None:
         """Store an ordered collection of layers.
 
         Args:

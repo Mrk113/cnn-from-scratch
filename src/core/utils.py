@@ -179,3 +179,113 @@ def hflip(x: cp.ndarray, axis: int = -1) -> cp.ndarray:
         cp.ndarray: Flipped tensor.
     """
     return cp.flip(x, axis=axis)
+
+
+def im2col(im: cp.ndarray,
+           kH: int,
+           kW: int,
+           s: int,
+           *,
+           indices: tuple[int, int, int, int] | None = None,
+           return_indices: bool = False
+          ) -> cp.ndarray | tuple[cp.ndarray, tuple[int, int, int, int]]:
+    """Convert input tensor into columns for convolution.
+
+    Args:
+        im: Padded input tensor of shape (N, C, H_padded, W_padded).
+        kH: Kernel height.
+        kW: Kernel width.
+        s: Stride for the convolution operation.
+        indices: Optional precomputed (i, j, d) index tuple from ``get_indices``.
+        return_indices: When True, return both the column matrix and the indices
+            used to build it. This allows callers to reuse the same indices in
+            the backward pass instead of recomputing them each time.
+
+    Returns:
+        Either the column matrix with shape (C*kH*kW, N*H_out*W_out) or a tuple
+        of (cols, indices) when return_indices is True.
+    """
+    if indices is None:
+        indices = get_indices(im.shape, kH, kW, s)
+
+    i, j, d = indices
+
+    # Advanced indexing gathers all sliding windows in one go. The transpose
+    # reshapes to the expected (C*kH*kW, N*H_out*W_out) layout without the
+    # extra concat used previously.
+    cols = im[:, d, i, j].transpose(1, 0, 2).reshape(d.size, -1)
+
+    if return_indices:
+        return cols, indices
+    return cols
+
+def col2im(cols: cp.ndarray,
+         x_shape: tuple[int, int, int, int],
+         kH: int,
+         kW: int,
+         s: int,
+         *,
+         indices: tuple[cp.ndarray, cp.ndarray, cp.ndarray] | None = None
+        ) -> cp.ndarray:
+    """Convert columns back to the original image shape after convolution.
+
+    Args:
+        cols: 2D array of shape (C*kH*kW, N*H_out*W_out) containing columnized data.
+        x_shape: Original shape of the input tensor (N, C, H_padded, W_padded).
+        kH: Kernel height.
+        kW: Kernel width.
+        s: Stride for the convolution operation.
+    """
+    N, C, H_p, W_p = x_shape
+    if indices is None:
+        i, j, d = get_indices(x_shape, kH, kW, s)
+    else:
+        i, j, d = indices
+
+    cols = cols.reshape(C * kH * kW, N, -1).transpose(1, 0, 2)  # (N, C*kH*kW, H_out*W_out)
+    im = cp.zeros(x_shape, dtype=cols.dtype)
+    # Use scatter_add to accumulate values into the correct positions in the output image
+    # slice(None) is used to select all elements along the batch dimension
+    cp.add.at(im, (slice(None), d, i, j), cols)  # (N, C, H_padded, W_padded)
+
+    return im
+
+
+def get_indices(x_shape: tuple[int, int, int, int],
+                kH: int,
+                kW: int,
+                s: int
+               ) -> tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
+    """Generate indices for im2col operation.
+
+    Args:
+        x_shape: Shape of the input tensor (N, C, H, W).
+        kH: Kernel height.
+        kW: Kernel width.
+        s: Stride for the convolution operation.
+
+    Returns:
+        tuple[cp.ndarray, cp.ndarray, cp.ndarray]: Indices for rows, columns, and channels.
+    """
+    N, C, H_p, W_p = x_shape
+    H_out = (H_p - kH) // s + 1
+    W_out = (W_p - kW) // s + 1
+
+    # Offsets within the kernel window
+    i0 = cp.repeat(cp.arange(kH), kW)              # (kH*kW,)
+    i0 = cp.tile(i0, C)                            # (C * kH * kW,)
+    j0 = cp.tile(cp.arange(kW), kH)                # (kH*kW,)
+    j0 = cp.tile(j0, C)                            # (C * kH * kW,)
+
+    # Top-left corners of each sliding window (output positions)
+    i1 = s * cp.repeat(cp.arange(H_out), W_out)    # (H_out * W_out,)
+    j1 = s * cp.tile(cp.arange(W_out), H_out)      # (H_out * W_out,)
+
+    # Combine to get full indices 
+    i = i0.reshape(-1, 1) + i1.reshape(1, -1)      # (C * kH * kW, H_out * W_out)
+    j = j0.reshape(-1, 1) + j1.reshape(1, -1)      # (C * kH * kW, H_out * W_out)
+
+    # Channel index for each row 
+    d = cp.repeat(cp.arange(C), kH * kW).reshape(-1, 1)    # (C * kH * kW, 1)
+
+    return i, j, d

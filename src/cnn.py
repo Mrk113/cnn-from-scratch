@@ -1,31 +1,33 @@
-from core import Model
+from core import *
 from core.layers import *
 from core.transforms import *
+from core.logging import Wandb
+from core.lr_scheduler import CosineAnnealing
 from core.datasets import CIFAR10
 from core.losses import CrossEntropy
 
 model = Model([
     Conv(3, 64, 3, padding=1),
-    BatchNorm(),
+    BatchNorm2d(),
     ReLU(),
     Conv(64, 64, 3, padding=1),
-    BatchNorm(),
+    BatchNorm2d(),
     ReLU(),
     MaxPool(2),
 
     Conv(64, 128, 3, padding=1),
-    BatchNorm(),
+    BatchNorm2d(),
     ReLU(),
     Conv(128, 128, 3, padding=1),
-    BatchNorm(),
+    BatchNorm2d(),
     ReLU(),
     MaxPool(2),
 
     Conv(128, 256, 3, padding=1),
-    BatchNorm(),
+    BatchNorm2d(),
     ReLU(),
     Conv(256, 256, 3, padding=1),
-    BatchNorm(),
+    BatchNorm2d(),
     ReLU(),
     MaxPool(2),
 
@@ -42,6 +44,11 @@ train_transform = Compose([
     Normalize(mean=CIFAR10.mean, std=CIFAR10.std, axis=1),
 ])
 
+test_transform = Compose([
+    Scale(),
+    Normalize(mean=CIFAR10.mean, std=CIFAR10.std, axis=1),
+])
+
 train_data = CIFAR10(
   root = "data",
   train = True,
@@ -53,19 +60,19 @@ test_data = CIFAR10(
   root = "data",
   train = False,
   download = True,
+  transform = test_transform
 )
 
-model.config(
+trainer = Trainer(
+    model=model,
     loss=CrossEntropy(),
-    lr=0.01
+    lr_sched=CosineAnnealing(lr_max=0.1, lr_min=0.0, T_max=80),
+    logger=Wandb(project_name="cnn-from-scratch", run_name="fc-change")
 )
 
-history = model.fit(
+trainer.fit(
     train_data,
-    None,
-    epochs=10,
+    test_data,
+    epochs=80,
     batch_size=64,
 )
-
-history.plot()
-history.wandb()
