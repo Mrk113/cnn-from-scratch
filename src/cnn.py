@@ -3,6 +3,9 @@ from core.layers import *
 from core.transforms import *
 from core.logging import Wandb
 from core.lr_scheduler import CosineAnnealing
+from core import Model
+from core.layers import *
+from core.transforms import *
 from core.datasets import CIFAR10
 from core.losses import CrossEntropy
 
