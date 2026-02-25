@@ -9,6 +9,7 @@ from core.transforms import *
 from core.datasets import CIFAR10
 from core.losses import CrossEntropy
 
+# Mini-VGG: 3 conv blocks + 2 FC layers for CIFAR-10
 model = Model([
     Conv(3, 64, 3, padding=1),
     BatchNorm2d(),
@@ -40,6 +41,7 @@ model = Model([
     FC(512, 10),
 ])
 
+# Training augmentation then normalization
 train_transform = Compose([
     RandomHorizontalFlip(p=0.5),
     RandomCrop(size=(32, 32), padding=4),
@@ -47,25 +49,29 @@ train_transform = Compose([
     Normalize(mean=CIFAR10.mean, std=CIFAR10.std, axis=1),
 ])
 
+# Eval pipeline keeps only resizing and normalization
 test_transform = Compose([
     Scale(),
     Normalize(mean=CIFAR10.mean, std=CIFAR10.std, axis=1),
 ])
 
+# Load CIFAR-10 with our transforms
 train_data = CIFAR10(
-  root = "data",
-  train = True,
-  download = True,
-  transform = train_transform
+    root = "data",
+    train = True,
+    download = True,
+    transform = train_transform
 )
 
+# Eval dataset with test transforms
 test_data = CIFAR10(
-  root = "data",
-  train = False,
-  download = True,
-  transform = test_transform
+    root = "data",
+    train = False,
+    download = True,
+    transform = test_transform
 )
 
+# Trainer combines model, loss, LR schedule, and logging backend
 trainer = Trainer(
     model=model,
     loss=CrossEntropy(),
@@ -73,6 +79,7 @@ trainer = Trainer(
     logger=Wandb(project_name="cnn-from-scratch", run_name="cifar10-cnn")  
 )
 
+# Start training with eval each epoch
 trainer.fit(
     train_data,
     test_data,
