@@ -9,6 +9,22 @@ from urllib.request import urlretrieve
 
 import cupy as cp
 
+def float32_contiguous(x: cp.ndarray) -> cp.ndarray:
+    """Ensure the input array is float32 and C-contiguous.
+
+    Args:
+        x: Input array to be converted.
+
+    Returns:
+        cp.ndarray: Converted array with float32 dtype and C-contiguous memory layout.
+        If needed.
+    """
+    if x.dtype != cp.float32:
+        x = x.astype(cp.float32, copy=False)
+    if not x.flags.c_contiguous:
+        x = cp.ascontiguousarray(x)
+    return x
+
 
 def download_from_url(url: str, files: list[str], dir_path: str) -> None:
     """Download one or more files from a base URL into a directory.

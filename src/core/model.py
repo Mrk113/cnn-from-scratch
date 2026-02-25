@@ -4,7 +4,7 @@ import cupy as cp
 from typing import Iterable
 
 from core.layers import Layer
-
+from .utils import float32_contiguous
 
 class Model:
     """Run forward and backward passes through a sequence of layers."""
@@ -27,6 +27,8 @@ class Model:
             cp.ndarray: Output produced by the final layer.
         """
         for layer in self.layers:
+            # More efficent GPU processing.
+            x = float32_contiguous(x)
             x = layer.forward(x)
         return x
     
@@ -38,5 +40,7 @@ class Model:
             lr: Learning rate passed to each layer's backward step.
         """
         for layer in reversed(self.layers):
+            # More efficent GPU processing.
+            grad = float32_contiguous(grad)
             grad = layer.backward(grad, lr)
                 

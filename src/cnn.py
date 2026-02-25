@@ -70,7 +70,6 @@ trainer = Trainer(
     model=model,
     loss=CrossEntropy(),
     lr_sched=CosineAnnealing(lr_max=0.1, lr_min=0.0, T_max=80),
-    logger=Wandb(project_name="cnn-from-scratch", run_name="fc-change")
 )
 
 trainer.fit(
