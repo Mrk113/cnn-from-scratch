@@ -18,7 +18,8 @@ class Model:
         self.layers = layers
 
     def forward(self, x: cp.ndarray) -> cp.ndarray:
-        """Propagate inputs through all layers in order.
+        """Propagate inputs through all layers in order. Preprocess inputs
+        to be contiguous float32 for more efficient GPU processing.
 
         Args:
             x: Input tensor by the first layer.
@@ -33,7 +34,8 @@ class Model:
         return x
     
     def backward(self, grad: cp.ndarray, lr: float) -> None:
-        """Propagate gradients backward through all layers.
+        """Propagate gradients backward through all layers. Preprocess gradients
+        to be contiguous float32 for more efficient GPU processing.
 
         Args:
             grad: Upstream gradient from the loss.

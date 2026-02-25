@@ -1,5 +1,6 @@
 name: cnn
 channels:
+  - pytorch
   - conda-forge
   - defaults
 dependencies:
@@ -8,8 +9,6 @@ dependencies:
   - cupy
   - wandb
   - tqdm
-  - pytest
-  - pip
-  - pip:
-    - torch
-    - torchvision 
+  - pytest # for testing
+  - pytorch # for testing against PyTorch's implementation
+  - torchvision # for testing against PyTorch's implementation
