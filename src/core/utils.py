@@ -102,17 +102,18 @@ def read_idx_file(file_path: str) -> cp.ndarray:
     return data
 
 
-def targz_extract(file: str, dir_path: str) -> None:
-    """Extract a .tar.gz archive into the given directory.
+def targz_extract(files: list[str], dir_path: str) -> None:
+    """Extract a list of .tar.gz archive into the given directory.
 
     Args:
-        file: Archive filename located within dir_path.
+        files: List of archive filenames located within dir_path.
         dir_path: Destination directory for extraction.
     """
-    file_path = os.path.join(dir_path, file)
-    with tarfile.open(file_path, 'r:gz') as tar:
-        tar.extractall(path=dir_path)
-    print(f"Extracting {file_path} -> {dir_path}")
+    for file_name in files:
+        file_path = os.path.join(dir_path, file_name)
+        with tarfile.open(file_path, 'r:gz') as tar:
+            tar.extractall(path=dir_path)
+        print(f"Extracting {file_path} -> {dir_path}")
 
 
 def read_bin_file(file_path: str) -> tuple[cp.ndarray, cp.ndarray]:
