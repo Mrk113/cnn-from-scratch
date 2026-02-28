@@ -20,7 +20,7 @@ class CIFAR10(DataSet):
     """
 
     base_url = "https://www.cs.toronto.edu/~kriz/"
-    resource = "cifar-10-binary.tar.gz"
+    resources = ["cifar-10-binary.tar.gz"]
     train_list = [
         "data_batch_1.bin",
         "data_batch_2.bin",
@@ -150,6 +150,6 @@ class CIFAR10(DataSet):
         if self._check_exists():
             return
         dir_path = os.path.join(self.root, "CIFAR10")
-        download_from_url(self.base_url, [self.resource], dir_path)
-        targz_extract(os.path.join(dir_path, self.resource), dir_path)
+        download_from_url(self.base_url, self.resources, dir_path)
+        targz_extract(self.resources, dir_path)
 
