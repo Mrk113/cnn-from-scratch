@@ -1,10 +1,12 @@
 """Utility helpers for dataset handling and array operations."""
 
 import gzip
+import time
 import os
 import shutil
 import struct
 import tarfile
+from tqdm import tqdm
 from urllib.request import urlretrieve
 
 import cupy as cp
@@ -306,3 +308,79 @@ def get_indices(x_shape: tuple[int, int, int, int],
     d = cp.repeat(cp.arange(C), kH * kW).reshape(-1, 1)    # (C * kH * kW, 1)
 
     return i, j, d
+
+
+def generate_random_ndarray(shape: tuple[int, ...]) -> cp.ndarray:
+    """Generate a random CuPy ndarray with the given shape.
+
+    Args:
+        shape: Desired array shape.
+
+    Returns:
+        cp.ndarray: CuPy array of random floats.
+    """
+    return cp.random.randn(*shape, dtype=cp.float32)
+
+
+def time_layer(layer, x, grad, *, lr: float) -> tuple[float, float]:
+    """Measure forward and backward latency for a single pass.
+
+    Args:
+        layer: Layer object exposing ``forward`` and ``backward`` methods.
+        x: Input tensor for the forward pass.
+        grad: Upstream gradient tensor for the backward pass.
+        lr: Learning rate forwarded to ``backward`` for layers that update parameters.
+
+    Returns:
+        tuple[float, float]: Forward time in seconds, backward time in seconds.
+    """
+
+    start = time.perf_counter()
+    layer.forward(x)
+    end = time.perf_counter()
+
+    forward_s = end - start
+
+    start = time.perf_counter()
+    layer.backward(grad, lr)
+    end = time.perf_counter()
+
+    backward_s = end - start
+
+    return forward_s, backward_s
+
+def benchmark_layer(
+    layer,
+    *,
+    step: int,
+    max_batch: int,
+    input_shape: tuple[int, int, int],
+    output_shape: tuple[int, int, int],
+    logger,
+    lr: float = 0.01,
+) -> None:
+    """Benchmark forward/backward runtime as batch size increases.
+
+    Args:
+        layer: Layer object exposing ``forward`` and ``backward`` methods.
+        step: Increment to grow the batch size between iterations.
+        max_batch: Maximum batch size to benchmark (inclusive upper bound).
+        input_shape: Shape of a single input sample (C, H, W).
+        output_shape: Shape of a single output/gradient sample (C, H, W).
+        logger: Callable that accepts a dict of metrics per batch size.
+        lr: Learning rate forwarded to ``backward`` for layers that update parameters.
+    """
+
+    for batch in tqdm(range(1, max_batch+ 1, step), desc="Benchmarking"):
+        x_shape = (batch, *input_shape)
+        grad_shape = (batch, *output_shape)
+        x = generate_random_ndarray(x_shape)
+        grad = generate_random_ndarray(grad_shape)
+
+        forward_t, backward_t = time_layer(layer, x, grad, lr=lr)
+        log = {
+            "batch": batch,
+            "forward_time(s)": forward_t,
+            "backward_time(s)": backward_t,
+        }
+        logger(log)

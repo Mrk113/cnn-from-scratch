@@ -6,7 +6,8 @@ from .layer import Layer
 __all__ = [
 	"ReLU",
 	"Softmax",
-	"BatchNorm2d",
+	"BatchNorm",
+  "NaiveConv",
 	"Conv",
 	"FC",
 	"Flatten",

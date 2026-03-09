@@ -2,10 +2,8 @@
 
 from typing import Any, Callable, Sequence
 
-from .transform import Transform
 
-
-class Compose(Transform):
+class Compose():
     """Chain multiple transforms in order.
 
     Each invocation applies the configured transforms sequentially to the

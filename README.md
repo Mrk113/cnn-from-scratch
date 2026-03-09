@@ -38,20 +38,22 @@ python src/cnn.py
 ## 📂 Project Structure
 
 ```text
-cnn-from-scratch/
-├─ src/
-│  ├─ core/
-│  │  ├─ datasets/        # MNIST, CIFAR-10 loaders & helpers
-│  │  ├─ transforms/      # Compose, Normalize, augmentations
-│  │  ├─ layers/          # Conv, pooling, activations, dense
-│  │  ├─ losses/          # Loss base, MSE, cross-entropy
-│  │  ├─ lr_scheduler/    # Cosine annealing, step LR
-│  │  ├─ logging/         # Logger base and W&B logger
-│  │  └─ utils.py         # Download/extract/read helpers
-│  └─ cnn.py              # Example training entrypoint
-├─ tests/                 # Unit tests for core modules
-├─ data/                  # Dataset storage (MNIST, CIFAR-10)
-└─ README.md
+  cnn-from-scratch/
+  ├─ src/
+  │  ├─ core/
+  │  │  ├─ datasets/        # MNIST, CIFAR-10 loaders & helpers
+  │  │  ├─ transforms/      # Compose, Normalize, augmentations
+  │  │  ├─ layers/          # Conv, pooling, activations, dense
+  │  │  ├─ losses/          # Loss base, MSE, cross-entropy
+  │  │  ├─ lr_scheduler/    # Cosine annealing, step LR
+  │  │  ├─ logging/         # Logger base and W&B logger
+  │  │  ├─ model.py         # Model to manage layers and forward pass 
+  │  │  ├─ trainer.py       # Training loop, validation
+  │  │  └─ utils.py         # Download/extract/read helpers
+  │  └─ cnn.py              # Example training entrypoint
+  ├─ tests/                 # Unit tests for core modules
+  ├─ data/                  # Dataset storage (MNIST, CIFAR-10)
+  └─ README.md
 ```
 
 ## 🧪 Testing

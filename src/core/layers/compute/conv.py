@@ -56,8 +56,8 @@ class Conv(Layer):
         self.padded_shape = None
         self.w_row = None
         self.x_col = None
-        self.im2col_indices: Optional[Tuple[cp.ndarray, cp.ndarray, cp.ndarray]] = None
-        self.im2col_key: Optional[Tuple[int, int, int, int, int, int]] = None  # (N, C, H_p, W_p, k, s)
+        self.im2col_indices = None
+        self.im2col_key = None  # (N, C, H_p, W_p, k, s)
 
         self.kernels_grad = None
         self.biases_grad = None

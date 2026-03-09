@@ -2,7 +2,7 @@ from core import *
 from core.layers import *
 from core.transforms import *
 from core.logging import Wandb
-from core.lr_scheduler import CosineAnnealing
+from core.lr_scheduler import CosineAnnealing, StepLR
 from core import Model
 from core.layers import *
 from core.transforms import *
@@ -12,26 +12,26 @@ from core.losses import CrossEntropy
 # Mini-VGG: 3 conv blocks + 2 FC layers for CIFAR-10
 model = Model([
     Conv(3, 64, 3, padding=1),
-    BatchNorm2d(),
+    BatchNorm(),
     ReLU(),
     Conv(64, 64, 3, padding=1),
-    BatchNorm2d(),
+    BatchNorm(),
     ReLU(),
     MaxPool(2),
 
     Conv(64, 128, 3, padding=1),
-    BatchNorm2d(),
+    BatchNorm(),
     ReLU(),
     Conv(128, 128, 3, padding=1),
-    BatchNorm2d(),
+    BatchNorm(),
     ReLU(),
     MaxPool(2),
 
     Conv(128, 256, 3, padding=1),
-    BatchNorm2d(),
+    BatchNorm(),
     ReLU(),
     Conv(256, 256, 3, padding=1),
-    BatchNorm2d(),
+    BatchNorm(),
     ReLU(),
     MaxPool(2),
 
@@ -43,8 +43,9 @@ model = Model([
 
 # Training augmentation then normalization
 train_transform = Compose([
-    RandomHorizontalFlip(p=0.5),
-    RandomCrop(size=(32, 32), padding=4),
+    RandomHorizontalFlip(0.5),
+    RandomCrop((32, 32), padding=10),
+    RandomCrop((32, 32), padding=2),
     Scale(),
     Normalize(mean=CIFAR10.mean, std=CIFAR10.std, axis=1),
 ])
@@ -75,8 +76,8 @@ test_data = CIFAR10(
 trainer = Trainer(
     model=model,
     loss=CrossEntropy(),
-    lr_sched=CosineAnnealing(lr_max=0.1, lr_min=0.0, T_max=80),
-    logger=Wandb(project_name="cnn-from-scratch", run_name="cifar10-cnn")  
+    lr_sched=CosineAnnealing(lr_max=0.1, lr_min=0.0001, T_max=80),
+    logger=Wandb(project_name="cnn-from-scratch", run_name="cnn-final")
 )
 
 # Start training with eval each epoch

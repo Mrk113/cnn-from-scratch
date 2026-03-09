@@ -51,7 +51,7 @@ test_data = MNIST(
 trainer = Trainer(model,
                   loss=MSE(),
                   lr_sched=StepLR(0.01),
-                  logger=Wandb(project_name="nn-from-scratch", run_name="mnist-mlp")  
+                  logger=Wandb(project_name="nn-from-scratch", run_name="mlp-mnist")  
                 )
 
 # Train for a few epochs with periodic evaluation

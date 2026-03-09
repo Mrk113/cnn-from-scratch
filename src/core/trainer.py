@@ -25,7 +25,7 @@ class Trainer:
         self.loss = loss
         self.lr_sched = lr_sched
         self.logger = logger
-        self.logs: dict[str, Any] = {}
+        self.logs = {}
     
     def fit(self,
             train_data: DataSet,

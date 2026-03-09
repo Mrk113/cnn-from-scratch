@@ -25,8 +25,7 @@ class Layer:
         """
         raise NotImplementedError("Forward method not implemented.")
 
-    def backward(self,
-                 grad: cp.ndarray, lr: float) -> cp.ndarray:
+    def backward(self, grad: cp.ndarray, lr: float) -> cp.ndarray:
         """Compute the backward pass for the layer.
 
         Args:
