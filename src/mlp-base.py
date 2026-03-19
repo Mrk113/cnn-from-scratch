@@ -1,5 +1,3 @@
-"""Fully connected CIFAR-10 baseline."""
-
 from core import *
 from core.layers import *
 from core.transforms import *

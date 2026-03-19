@@ -1,4 +1,5 @@
 """Benchmark NaiveConv."""
+
 from core.layers import NaiveConv
 from core.logging import Wandb
 from core.utils import benchmark_layer

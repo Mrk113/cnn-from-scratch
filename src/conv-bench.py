@@ -1,4 +1,5 @@
 """Benchmark Conv."""
+
 from core.layers import Conv
 from core.logging import Wandb
 from core.utils import benchmark_layer
