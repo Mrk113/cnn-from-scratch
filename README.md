@@ -15,7 +15,7 @@
 This project implements core deep learning building blocks, datasets, layers, transforms, losses, schedulers, and training loops using CuPy for GPU acceleration and minimal external dependencies. It is designed to be easily extendable.
 
 ## ✨ Features
-- CuPy-based tensor operations for GPU-friendly execution
+- CuPy-based tensor operations
 - Dataset loaders for MNIST and CIFAR-10 with transforms and normalization
 - Common layers (convolution, pooling, activation, batch norm, fully connected)
 - Training utilities with learning-rate schedulers and logging 
@@ -32,7 +32,7 @@ conda activate cnn
 Run a training script:
 
 ```bash
-python src/cnn.py
+python ./src/cnn.py
 ```
 
 ## 📂 Project Structure
@@ -60,5 +60,5 @@ python src/cnn.py
 Run the test suite with pytest:
 
 ```bash
-pytest
+pytest ./tests
 ```
